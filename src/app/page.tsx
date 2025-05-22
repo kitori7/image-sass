@@ -1,8 +1,10 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import db from '@/server/db';
 
-export default function Home() {
+export default async function Home() {
+  const users = await db.query.Users.findMany();
   return (
     <div className="flex h-screen flex-col items-center justify-center">
       <form className="flex w-full max-w-md flex-col gap-4">
@@ -11,6 +13,7 @@ export default function Home() {
         <Textarea name="description" placeholder="App Description" />
         <Button type="submit">Submit</Button>
       </form>
+      <pre>{JSON.stringify(users, null, 2)}</pre>
     </div>
   );
 }
