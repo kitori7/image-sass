@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import db from '@/server/db';
 
 export default async function Home() {
-  const users = await db.query.Users.findMany();
+  const users = await db.query.users.findMany();
   return (
     <div className="flex h-screen flex-col items-center justify-center">
       <form className="flex w-full max-w-md flex-col gap-4">
