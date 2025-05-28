@@ -2,10 +2,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { getServerSession } from '@/server/auth';
+import { createCaller, createTRPCContext } from '@/utils/trpc';
 import { redirect } from 'next/navigation';
 
-export default async function Home() {
+export default async function Dashboard() {
   const session = await getServerSession();
+  const context = await createTRPCContext();
+  const data = await createCaller(context).hello();
 
   if (!session?.user) {
     redirect('/api/auth/signin');
@@ -19,7 +22,7 @@ export default async function Home() {
         <Textarea name="description" placeholder="App Description" />
         <Button type="submit">Submit</Button>
       </form>
-      <pre>{JSON.stringify(session, null, 2)}</pre>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
     </div>
   );
 }

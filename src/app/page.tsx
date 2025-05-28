@@ -2,11 +2,10 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { trpc } from '@/utils/api';
+import { trpc } from '@/components/trpc-provider';
 
 export default function Home() {
   const hello = trpc.hello.useQuery();
-  console.log(hello);
 
   return (
     <div className="flex h-screen flex-col items-center justify-center">
