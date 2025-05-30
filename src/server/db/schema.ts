@@ -1,11 +1,13 @@
 import { boolean, timestamp, pgTable, text, primaryKey, integer } from 'drizzle-orm/pg-core';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import * as dotenv from 'dotenv';
+dotenv.config({ path: './dev.env' });
 
 export type AdapterAccountType = 'oauth' | 'oidc' | 'email' | 'webauthn';
 
 const connectionString =
-  process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/drizzle';
+  process.env.DATABASE_URL || 'postgres://postgres:1234@localhost:5432/postgres';
 const pool = postgres(connectionString, { max: 1 });
 
 export const db = drizzle(pool);

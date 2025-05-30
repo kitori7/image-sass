@@ -1,0 +1,61 @@
+import { router } from '@/server/trpc';
+import { protectedProcedure } from '../trpc';
+import { z } from 'zod/v4';
+import * as dotenv from 'dotenv';
+import { PutObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { TRPCError } from '@trpc/server';
+
+dotenv.config({ path: './dev.env' });
+
+export const fileRoutes = router({
+  createPresignedUrl: protectedProcedure
+    .input(
+      z.object({
+        filename: z.string(),
+        contentType: z.string(),
+        size: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        // 生成文件key，添加随机UUID避免重名
+        const randomId = crypto.randomUUID().replace(/-/g, '');
+        const fileExtension = input.filename.split('.').pop();
+        const key = `love-img/${randomId}.${fileExtension}`;
+
+        const params: PutObjectCommandInput = {
+          Bucket: process.env.BUCKET,
+          Key: key,
+          ContentType: input.contentType,
+          ContentLength: input.size,
+        };
+
+        const s3Client = new S3Client({
+          endpoint: process.env.API_ENDPOINT,
+          region: process.env.REGION,
+          credentials: {
+            accessKeyId: process.env.COS_APP_ID!,
+            secretAccessKey: process.env.COS_APP_SECRET_KEY!,
+          },
+        });
+
+        const command = new PutObjectCommand(params);
+        const url = await getSignedUrl(s3Client, command, {
+          expiresIn: 300, // 增加到5分钟
+        });
+
+        return {
+          url,
+          method: 'PUT' as const,
+          key, // 返回文件key，方便后续获取
+        };
+      } catch (error) {
+        console.error('生成预签名URL失败:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '生成上传URL失败',
+        });
+      }
+    }),
+});
