@@ -5,8 +5,10 @@ import * as dotenv from 'dotenv';
 import { PutObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { TRPCError } from '@trpc/server';
+import db from '../db';
+import { files } from '../db/schema';
 
-dotenv.config({ path: './dev.env' });
+dotenv.config({ path: process.cwd() + '/dev.env' });
 
 export const fileRoutes = router({
   createPresignedUrl: protectedProcedure
@@ -34,6 +36,7 @@ export const fileRoutes = router({
         const s3Client = new S3Client({
           endpoint: process.env.API_ENDPOINT,
           region: process.env.REGION,
+          forcePathStyle: true, // 腾讯云COS需要这个配置
           credentials: {
             accessKeyId: process.env.COS_APP_ID!,
             secretAccessKey: process.env.COS_APP_SECRET_KEY!,
@@ -57,5 +60,28 @@ export const fileRoutes = router({
           message: '生成上传URL失败',
         });
       }
+    }),
+  saveFile: protectedProcedure
+    .input(
+      z.object({
+        name: z.string(),
+        path: z.string(),
+        type: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { session } = ctx;
+      const url = new URL(input.path);
+      const photo = await db
+        .insert(files)
+        .values({
+          ...input,
+          path: url.pathname,
+          url: url.toString(),
+          userId: session.user.id,
+          contentType: input.type,
+        })
+        .returning();
+      return photo[0];
     }),
 });

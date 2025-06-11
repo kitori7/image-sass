@@ -1,7 +1,16 @@
-import { boolean, timestamp, pgTable, text, primaryKey, integer } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  timestamp,
+  pgTable,
+  text,
+  primaryKey,
+  integer,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as dotenv from 'dotenv';
+import { relations } from 'drizzle-orm';
 dotenv.config({ path: './dev.env' });
 
 export type AdapterAccountType = 'oauth' | 'oidc' | 'email' | 'webauthn';
@@ -12,6 +21,7 @@ const pool = postgres(connectionString, { max: 1 });
 
 export const db = drizzle(pool);
 
+// 用户表
 export const users = pgTable('user', {
   id: text('id')
     .primaryKey()
@@ -22,6 +32,7 @@ export const users = pgTable('user', {
   image: text('image'),
 });
 
+// 账户表
 export const accounts = pgTable(
   'account',
   {
@@ -48,6 +59,7 @@ export const accounts = pgTable(
   ]
 );
 
+// 会话表
 export const sessions = pgTable('session', {
   sessionToken: text('sessionToken').primaryKey(),
   userId: text('userId')
@@ -56,6 +68,7 @@ export const sessions = pgTable('session', {
   expires: timestamp('expires', { mode: 'date' }).notNull(),
 });
 
+// 验证令牌表
 export const verificationTokens = pgTable(
   'verificationToken',
   {
@@ -72,6 +85,7 @@ export const verificationTokens = pgTable(
   ]
 );
 
+// 认证器表
 export const authenticators = pgTable(
   'authenticator',
   {
@@ -94,3 +108,29 @@ export const authenticators = pgTable(
     },
   ]
 );
+
+// 文件表
+export const files = pgTable('file', {
+  id: text('id')
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: varchar('name', { length: 255 }).notNull(),
+  type: varchar('type', { length: 255 }).notNull(),
+  url: varchar('url', { length: 1024 }).notNull(),
+  path: varchar('path', { length: 1024 }).notNull(),
+  userId: text('userId')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  contentType: varchar('contentType', { length: 255 }).notNull(),
+  deleteAt: timestamp('deleteAt', { mode: 'date' }),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+});
+
+// 文件关联表
+export const fileRelations = relations(files, ({ one }) => ({
+  files: one(users, {
+    fields: [files.userId],
+    references: [users.id],
+  }),
+}));

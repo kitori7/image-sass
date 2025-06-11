@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Uppy } from '@uppy/core';
 import AWS3 from '@uppy/aws-s3';
 import Image from 'next/image';
@@ -13,9 +13,12 @@ export default function Dashboard() {
   );
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  const [uppy] = useState(() => {
-    const uppy = new Uppy();
+  // 使用 useRef 保存 Uppy 实例
+  const uppyRef = useRef<Uppy | null>(null);
 
+  // 初始化 Uppy 实例
+  if (!uppyRef.current) {
+    const uppy = new Uppy();
     uppy.use(AWS3, {
       shouldUseMultipart: false,
       getUploadParameters(file) {
@@ -26,14 +29,33 @@ export default function Dashboard() {
         });
       },
     });
+    uppyRef.current = uppy;
+  }
 
-    // 添加上传事件监听
-    uppy.on('upload', () => {
+  const uppy = uppyRef.current;
+
+  // 在 useEffect 中管理事件监听器
+  useEffect(() => {
+    if (!uppy) return;
+
+    // 定义事件处理函数
+    const handleUpload = () => {
       setUploadStatus('uploading');
       setErrorMessage('');
-    });
+    };
 
-    uppy.on('complete', result => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleUploadSuccess = (file: any, response: { uploadURL?: string }) => {
+      if (file) {
+        trpcPureClient.file.saveFile.mutate({
+          name: file.data instanceof File ? file.data.name : '',
+          type: file.data.type,
+          path: response.uploadURL ?? '',
+        });
+      }
+    };
+
+    const handleComplete = (result: { failed?: Array<unknown>; successful?: Array<unknown> }) => {
       if (result.failed && result.failed.length > 0) {
         setUploadStatus('error');
         setErrorMessage(`${result.failed.length} 个文件上传失败`);
@@ -41,15 +63,37 @@ export default function Dashboard() {
         setUploadStatus('success');
         setTimeout(() => setUploadStatus('idle'), 3000); // 3秒后重置状态
       }
-    });
+    };
 
-    uppy.on('error', error => {
+    const handleError = (error: Error) => {
       setUploadStatus('error');
       setErrorMessage(error.message || '上传过程中发生错误');
-    });
+    };
 
-    return uppy;
-  });
+    // 添加事件监听器
+    uppy.on('upload', handleUpload);
+    uppy.on('upload-success', handleUploadSuccess);
+    uppy.on('complete', handleComplete);
+    uppy.on('error', handleError);
+
+    // 清理函数：移除事件监听器
+    return () => {
+      uppy.off('upload', handleUpload);
+      uppy.off('upload-success', handleUploadSuccess);
+      uppy.off('complete', handleComplete);
+      uppy.off('error', handleError);
+    };
+  }, [uppy]);
+
+  // 组件卸载时清理 Uppy 实例
+  useEffect(() => {
+    return () => {
+      if (uppyRef.current) {
+        uppyRef.current.destroy();
+        uppyRef.current = null;
+      }
+    };
+  }, []);
 
   const files = useUppyState(uppy, state => Object.values(state.files));
   const progress = useUppyState(uppy, s => s.totalProgress);
