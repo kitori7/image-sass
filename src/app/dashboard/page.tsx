@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useUppyState } from './useUppyState';
 import { trpcPureClient } from '@/lib/trpc-client';
 import { Button } from '@/components/ui/button';
+import { trpc } from '@/components/trpc-provider';
 
 export default function Dashboard() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>(
@@ -61,6 +62,10 @@ export default function Dashboard() {
         setErrorMessage(`${result.failed.length} 个文件上传失败`);
       } else {
         setUploadStatus('success');
+        // 上传成功后清空文件选择
+        uppy.getFiles().forEach(file => {
+          uppy.removeFile(file.id);
+        });
         setTimeout(() => setUploadStatus('idle'), 3000); // 3秒后重置状态
       }
     };
@@ -137,50 +142,85 @@ export default function Dashboard() {
     }
   };
 
+  // 列表展示
+  const { data: fileList, isPending, refetch } = trpc.file.listFiles.useQuery();
+
+  // 上传成功后刷新文件列表
+  useEffect(() => {
+    if (uploadStatus === 'success') {
+      refetch();
+    }
+  }, [uploadStatus, refetch]);
+
   return (
-    <div className="flex h-screen flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl space-y-6">
-        <h1 className="text-center text-2xl font-bold">图片上传</h1>
-
-        <input
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={handleFileSelect}
-          className="w-full rounded-md border border-gray-300 p-2"
-        />
-
-        {files.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            {files.map(file => {
-              const url = URL.createObjectURL(file.data);
-              return (
-                <div key={file.id} className="relative">
-                  <Image
-                    src={url}
-                    alt={file.name || ''}
-                    width={200}
-                    height={200}
-                    className="rounded object-cover"
-                  />
-                  <p className="mt-1 truncate text-sm text-gray-600">{file.name}</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="mx-auto max-w-6xl space-y-8">
+        {/* 页面标题 */}
         <div className="text-center">
-          <Button
-            onClick={() => uppy.upload()}
-            disabled={files.length === 0 || uploadStatus === 'uploading'}
-            className="min-w-32"
-          >
-            {uploadStatus === 'uploading' ? '上传中...' : '开始上传'}
-          </Button>
+          <h1 className="text-3xl font-bold text-gray-900">我的图片库</h1>
+          <p className="mt-2 text-gray-600">管理和浏览你的图片文件</p>
         </div>
 
-        <div className={`text-center text-sm ${getStatusColor()}`}>{getStatusText()}</div>
+        {/* 上传区域 */}
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-center space-x-4">
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="rounded-md border border-gray-300 p-2 text-sm"
+            />
+            <Button
+              onClick={() => uppy.upload()}
+              disabled={files.length === 0 || uploadStatus === 'uploading'}
+              className="min-w-32"
+            >
+              {uploadStatus === 'uploading' ? '上传中...' : '开始上传'}
+            </Button>
+          </div>
+
+          {/* 上传状态 */}
+          <div className={`mt-4 text-center text-sm ${getStatusColor()}`}>{getStatusText()}</div>
+        </div>
+
+        {/* 文件列表 */}
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900">已上传的图片</h2>
+
+          {isPending ? (
+            <div className="text-center text-gray-500">加载中...</div>
+          ) : fileList && fileList.length > 0 ? (
+            <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4">
+              {fileList.map(file => (
+                <div
+                  key={file.id}
+                  className="group relative overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                >
+                  <div className="relative aspect-square">
+                    <Image
+                      src={file.url}
+                      alt={file.name}
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
+                    />
+                  </div>
+                  <div className="p-3">
+                    <p className="truncate text-sm font-medium text-gray-900">{file.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {new Date(file.createdAt).toLocaleDateString('zh-CN')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500">
+              <p>暂无上传的图片</p>
+              <p className="mt-1 text-sm">选择图片文件开始上传吧</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

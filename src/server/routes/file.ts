@@ -7,6 +7,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { TRPCError } from '@trpc/server';
 import db from '../db';
 import { files } from '../db/schema';
+import { desc } from 'drizzle-orm';
 
 dotenv.config({ path: process.cwd() + '/dev.env' });
 
@@ -84,4 +85,10 @@ export const fileRoutes = router({
         .returning();
       return photo[0];
     }),
+  listFiles: protectedProcedure.query(async ({}) => {
+    const res = await db.query.files.findMany({
+      orderBy: [desc(files.createdAt)],
+    });
+    return res;
+  }),
 });
