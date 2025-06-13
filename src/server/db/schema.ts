@@ -128,9 +128,9 @@ export const files = pgTable('file', {
 });
 
 // 文件关联表
-export const fileRelations = relations(files, ({ one }) => ({
-  files: one(users, {
-    fields: [files.userId],
-    references: [users.id],
+export const fileRelations = relations(users, ({ one }) => ({
+  files: one(files, {
+    fields: [users.id],
+    references: [files.userId],
   }),
 }));

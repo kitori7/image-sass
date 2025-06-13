@@ -15,8 +15,6 @@ export const withLoggerProcedure = procedure.use(async ({ next }) => {
 
 export const withSessionMiddleware = middleware(async ({ next }) => {
   const session = await getServerSession();
-  console.log(session);
-
   return next({ ctx: { session } });
 });
 

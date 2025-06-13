@@ -1,19 +1,18 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Uppy } from '@uppy/core';
+import { Meta, Uppy, UppyFile } from '@uppy/core';
 import AWS3 from '@uppy/aws-s3';
-import Image from 'next/image';
 import { useUppyState } from './useUppyState';
 import { trpcPureClient } from '@/lib/trpc-client';
-import { Button } from '@/components/ui/button';
 import { trpc } from '@/components/trpc-provider';
+import Dropzone from '@/components/feature/Dropzone';
+import usePasteFile from '@/hooks/usePasteFile';
+import UploadButton from '@/components/feature/UploadButton';
+import UploadStatus from '@/app/dashboard/components/UploadStatus';
+import UpLoadPreview from '@/app/dashboard/components/UploadPreview';
+import ImagePreviewList, { ImagePreviewItem } from '@/app/dashboard/components/ImagePreviewList';
 
 export default function Dashboard() {
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>(
-    'idle'
-  );
-  const [errorMessage, setErrorMessage] = useState<string>('');
-
   // 使用 useRef 保存 Uppy 实例
   const uppyRef = useRef<Uppy | null>(null);
 
@@ -35,28 +34,43 @@ export default function Dashboard() {
 
   const uppy = uppyRef.current;
 
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>(
+    'idle'
+  );
+  const [uploadingFileIds, setUploadingFileIds] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const uppyFiles = useUppyState(uppy, s => s.files);
+  const { data: fileList, isPending } = trpc.file.listFiles.useQuery();
+  const utils = trpc.useUtils();
+
   // 在 useEffect 中管理事件监听器
   useEffect(() => {
     if (!uppy) return;
 
-    // 定义事件处理函数
-    const handleUpload = () => {
+    const handleUpload = (uploadID: string, files: UppyFile<Meta, Record<string, never>>[]) => {
       setUploadStatus('uploading');
-      setErrorMessage('');
+      setUploadingFileIds(files.map(file => file.id));
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleUploadSuccess = (file: any, response: { uploadURL?: string }) => {
+    const handleUploadSuccess = async (file: any, response: { uploadURL?: string }) => {
       if (file) {
-        trpcPureClient.file.saveFile.mutate({
+        const res = await trpcPureClient.file.saveFile.mutate({
           name: file.data instanceof File ? file.data.name : '',
           type: file.data.type,
           path: response.uploadURL ?? '',
+        });
+        utils.file.listFiles.setData(undefined, prev => {
+          if (!prev) {
+            return [res];
+          }
+          return [res, ...prev];
         });
       }
     };
 
     const handleComplete = (result: { failed?: Array<unknown>; successful?: Array<unknown> }) => {
+      setUploadingFileIds([]);
       if (result.failed && result.failed.length > 0) {
         setUploadStatus('error');
         setErrorMessage(`${result.failed.length} 个文件上传失败`);
@@ -70,25 +84,18 @@ export default function Dashboard() {
       }
     };
 
-    const handleError = (error: Error) => {
-      setUploadStatus('error');
-      setErrorMessage(error.message || '上传过程中发生错误');
-    };
-
     // 添加事件监听器
     uppy.on('upload', handleUpload);
     uppy.on('upload-success', handleUploadSuccess);
     uppy.on('complete', handleComplete);
-    uppy.on('error', handleError);
 
     // 清理函数：移除事件监听器
     return () => {
       uppy.off('upload', handleUpload);
       uppy.off('upload-success', handleUploadSuccess);
       uppy.off('complete', handleComplete);
-      uppy.off('error', handleError);
     };
-  }, [uppy]);
+  }, [uppy, utils]);
 
   // 组件卸载时清理 Uppy 实例
   useEffect(() => {
@@ -100,57 +107,43 @@ export default function Dashboard() {
     };
   }, []);
 
-  const files = useUppyState(uppy, state => Object.values(state.files));
-  const progress = useUppyState(uppy, s => s.totalProgress);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (fileList) {
-      Array.from(fileList).forEach(file => {
+  // 粘贴上传
+  usePasteFile({
+    onFilesPaste: files => {
+      files.forEach(file => {
         uppy.addFile({
           name: file.name,
           type: file.type,
           data: file,
         });
       });
-    }
-  };
+    },
+  });
 
-  const getStatusText = () => {
-    switch (uploadStatus) {
-      case 'uploading':
-        return `上传中... ${progress}%`;
-      case 'success':
-        return '上传成功！';
-      case 'error':
-        return `上传失败: ${errorMessage}`;
-      default:
-        return '选择图片并点击上传';
-    }
-  };
+  // 乐观 UI 合并逻辑
+  const uploadingImages: ImagePreviewItem[] = uploadingFileIds
+    .map(id => {
+      const item = uppyFiles[id];
+      if (!item) return null;
+      return {
+        id: item.id,
+        url: typeof item.data === 'string' ? item.data : URL.createObjectURL(item.data),
+        name: item.name ?? '',
+        createdAt: (item.meta.createdAt as string) || new Date().toISOString(),
+        uploading: true,
+      };
+    })
+    .filter(Boolean) as ImagePreviewItem[];
 
-  const getStatusColor = () => {
-    switch (uploadStatus) {
-      case 'uploading':
-        return 'text-blue-600';
-      case 'success':
-        return 'text-green-600';
-      case 'error':
-        return 'text-red-600';
-      default:
-        return 'text-gray-600';
-    }
-  };
+  const uploadedImages: ImagePreviewItem[] = (fileList || []).map(item => ({
+    id: item.id,
+    url: item.url,
+    name: item.name,
+    createdAt: item.createdAt || '',
+    uploading: false,
+  }));
 
-  // 列表展示
-  const { data: fileList, isPending, refetch } = trpc.file.listFiles.useQuery();
-
-  // 上传成功后刷新文件列表
-  useEffect(() => {
-    if (uploadStatus === 'success') {
-      refetch();
-    }
-  }, [uploadStatus, refetch]);
+  const images = [...uploadingImages, ...uploadedImages];
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -160,67 +153,35 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold text-gray-900">我的图片库</h1>
           <p className="mt-2 text-gray-600">管理和浏览你的图片文件</p>
         </div>
-
+        {/* 上传状态提示 */}
+        <UploadStatus status={uploadStatus} errorMessage={errorMessage} />
         {/* 上传区域 */}
         <div className="rounded-lg bg-white p-6 shadow-sm">
           <div className="flex items-center justify-center space-x-4">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="rounded-md border border-gray-300 p-2 text-sm"
-            />
-            <Button
-              onClick={() => uppy.upload()}
-              disabled={files.length === 0 || uploadStatus === 'uploading'}
-              className="min-w-32"
-            >
-              {uploadStatus === 'uploading' ? '上传中...' : '开始上传'}
-            </Button>
+            <UploadButton uppy={uppy} />
           </div>
-
-          {/* 上传状态 */}
-          <div className={`mt-4 text-center text-sm ${getStatusColor()}`}>{getStatusText()}</div>
         </div>
-
         {/* 文件列表 */}
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">已上传的图片</h2>
-
-          {isPending ? (
-            <div className="text-center text-gray-500">加载中...</div>
-          ) : fileList && fileList.length > 0 ? (
-            <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4">
-              {fileList.map(file => (
-                <div
-                  key={file.id}
-                  className="group relative overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
-                >
-                  <div className="relative aspect-square">
-                    <Image
-                      src={file.url}
-                      alt={file.name}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-105"
-                    />
-                  </div>
-                  <div className="p-3">
-                    <p className="truncate text-sm font-medium text-gray-900">{file.name}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {new Date(file.createdAt).toLocaleDateString('zh-CN')}
-                    </p>
-                  </div>
+        <Dropzone uppy={uppy}>
+          {dragging => (
+            <div
+              className={`relative rounded-lg bg-white p-6 shadow-sm ${dragging ? 'border-2 border-blue-500' : ''}`}
+            >
+              <h2 className="mb-6 text-xl font-semibold text-gray-900">已上传的图片</h2>
+              {dragging && (
+                <div className="absolute inset-0 z-10 flex h-full w-full items-center justify-center bg-gray-200/50 text-white">
+                  拖拽图片到此处上传
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center text-gray-500">
-              <p>暂无上传的图片</p>
-              <p className="mt-1 text-sm">选择图片文件开始上传吧</p>
+              )}
+              {isPending ? (
+                <div className="text-center text-gray-500">加载中...</div>
+              ) : (
+                <ImagePreviewList images={images} />
+              )}
             </div>
           )}
-        </div>
+        </Dropzone>
+        <UpLoadPreview uppy={uppy}></UpLoadPreview>
       </div>
     </div>
   );
