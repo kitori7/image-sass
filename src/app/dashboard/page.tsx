@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Meta, Uppy, UppyFile } from '@uppy/core';
 import AWS3 from '@uppy/aws-s3';
 import { useUppyState } from './useUppyState';
-import { trpcPureClient } from '@/lib/trpc-client';
+import { trpcPureClient, AppRouter } from '@/lib/trpc-client';
 import { trpc } from '@/components/trpc-provider';
 import Dropzone from '@/components/feature/Dropzone';
 import usePasteFile from '@/hooks/usePasteFile';
@@ -11,6 +11,9 @@ import UploadButton from '@/components/feature/UploadButton';
 import UploadStatus from '@/app/dashboard/components/UploadStatus';
 import UpLoadPreview from '@/app/dashboard/components/UploadPreview';
 import ImagePreviewList, { ImagePreviewItem } from '@/app/dashboard/components/ImagePreviewList';
+import { inferRouterOutputs } from '@trpc/server';
+
+type FileItem = inferRouterOutputs<AppRouter>['file']['infiniteListFiles'];
 
 export default function Dashboard() {
   // 使用 useRef 保存 Uppy 实例
@@ -40,7 +43,17 @@ export default function Dashboard() {
   const [uploadingFileIds, setUploadingFileIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const uppyFiles = useUppyState(uppy, s => s.files);
-  const { data: fileList, isPending } = trpc.file.listFiles.useQuery();
+  const { data: infiniteData, isPending } = trpc.file.infiniteListFiles.useInfiniteQuery(
+    {
+      limit: 3,
+    },
+    {
+      getNextPageParam: res => res.nextCursor,
+    }
+  );
+  const fileList =
+    infiniteData?.pages.reduce((acc, page) => [...acc, ...page.files], [] as FileItem['files']) ??
+    [];
   const utils = trpc.useUtils();
 
   // 在 useEffect 中管理事件监听器

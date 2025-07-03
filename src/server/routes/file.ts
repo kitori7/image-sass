@@ -91,4 +91,23 @@ export const fileRoutes = router({
     });
     return res;
   }),
+  infiniteListFiles: protectedProcedure
+    .input(
+      z.object({
+        cursor: z.string().optional(),
+        limit: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const { cursor, limit } = input;
+      const res = await db.query.files.findMany({
+        where: (files, { gt }) => gt(files.id, cursor ?? ''),
+        orderBy: [desc(files.createdAt)],
+        limit: limit ?? 10,
+      });
+      return {
+        files: res,
+        nextCursor: res[res.length - 1]?.id,
+      };
+    }),
 });
