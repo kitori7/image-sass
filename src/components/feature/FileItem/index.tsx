@@ -1,4 +1,6 @@
+import { Meta, UppyFile } from '@uppy/core';
 import Image from 'next/image';
+import { useMemo } from 'react';
 
 export interface FileItemProps {
   url: string;
@@ -30,4 +32,31 @@ export default function FileItem({ url, name, createdAt, uploading }: FileItemPr
       </div>
     </div>
   );
+}
+
+export function LocalFileItem({
+  file,
+  createdAt,
+  uploading,
+}: {
+  file: UppyFile<Meta, Record<string, never>>;
+  createdAt: string;
+  uploading?: boolean;
+}) {
+  const url = useMemo(() => URL.createObjectURL(file.data), [file]);
+  return <FileItem url={url} name={file.name || ''} createdAt={createdAt} uploading={uploading} />;
+}
+
+export function RemoteFileItem({
+  url,
+  name,
+  createdAt,
+  uploading,
+}: {
+  url: string;
+  name: string;
+  createdAt: string;
+  uploading?: boolean;
+}) {
+  return <FileItem url={url} name={name} createdAt={createdAt} uploading={uploading} />;
 }

@@ -10,7 +10,7 @@ import Uppy from '@uppy/core';
 import { useUppyState } from '../../useUppyState';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import FileItem from '@/components/feature/FileItem';
+import { LocalFileItem } from '@/components/feature/FileItem';
 
 export default function UpLoadPreview({ uppy }: { uppy: Uppy }) {
   const files = useUppyState(uppy, s => Object.values(s.files));
@@ -42,11 +42,7 @@ export default function UpLoadPreview({ uppy }: { uppy: Uppy }) {
           <Button variant="ghost" onClick={() => setIndex(index - 1)} disabled={index === 0}>
             <ChevronLeft />
           </Button>
-          <FileItem
-            url={URL.createObjectURL(file?.data ?? new File([], ''))}
-            name={file?.name ?? ''}
-            createdAt={new Date().toISOString()}
-          />
+          <LocalFileItem file={file} createdAt={new Date().toISOString()} />
           <Button
             variant="ghost"
             onClick={() => setIndex(index + 1)}
