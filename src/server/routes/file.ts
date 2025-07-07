@@ -94,20 +94,34 @@ export const fileRoutes = router({
   infiniteListFiles: protectedProcedure
     .input(
       z.object({
-        cursor: z.string().optional(),
+        cursor: z
+          .object({
+            id: z.string(),
+            createdAt: z.string(),
+          })
+          .optional(),
         limit: z.number().optional(),
       })
     )
     .query(async ({ input }) => {
       const { cursor, limit } = input;
       const res = await db.query.files.findMany({
-        where: (files, { gt }) => gt(files.id, cursor ?? ''),
+        where: (_, { sql }) =>
+          Object.keys(cursor ?? {}).length > 0
+            ? sql`("files"."createdAt","files"."id")<(${new Date(cursor?.createdAt ?? '').toISOString()},${cursor?.id})`
+            : undefined,
         orderBy: [desc(files.createdAt)],
         limit: limit ?? 10,
       });
       return {
         files: res,
-        nextCursor: res[res.length - 1]?.id,
+        nextCursor:
+          res.length > 0
+            ? {
+                createdAt: res[res.length - 1].createdAt,
+                id: res[res.length - 1].id,
+              }
+            : null,
       };
     }),
 });

@@ -6,6 +6,7 @@ import {
   primaryKey,
   integer,
   varchar,
+  index,
 } from 'drizzle-orm/pg-core';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -110,22 +111,30 @@ export const authenticators = pgTable(
 );
 
 // 文件表
-export const files = pgTable('file', {
-  id: text('id')
-    .notNull()
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: varchar('name', { length: 255 }).notNull(),
-  type: varchar('type', { length: 255 }).notNull(),
-  url: varchar('url', { length: 1024 }).notNull(),
-  path: varchar('path', { length: 1024 }).notNull(),
-  userId: text('userId')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  contentType: varchar('contentType', { length: 255 }).notNull(),
-  deleteAt: timestamp('deleteAt', { mode: 'date' }),
-  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-});
+export const files = pgTable(
+  'file',
+  {
+    id: text('id')
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: varchar('name', { length: 255 }).notNull(),
+    type: varchar('type', { length: 255 }).notNull(),
+    url: varchar('url', { length: 1024 }).notNull(),
+    path: varchar('path', { length: 1024 }).notNull(),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    contentType: varchar('contentType', { length: 255 }).notNull(),
+    deleteAt: timestamp('deleteAt', { mode: 'date' }),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  file => [
+    {
+      cursorIndex: index('cursorIndex').on(file.id, file.createdAt),
+    },
+  ]
+);
 
 // 文件关联表
 export const fileRelations = relations(users, ({ one }) => ({
